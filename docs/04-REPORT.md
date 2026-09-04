@@ -362,6 +362,121 @@ export async function previewProductsReport(): Promise<void> {
 6. ยิง `curl "http://localhost:5100/reports/products?minId=1&maxId=1" -H "Authorization: Bearer <token>"` (ดู [03-WEB.md Step 13](./03-WEB.md#step-13-ออกรายงานสินค้าตามช่วงรหัส--srcappauthenticatedproductsreportpagetsx--srcmodulesreportscomponentsproductrangereportformtsx) สำหรับทดสอบผ่านหน้าเว็บโดยตรง) — ควรได้ PDF ที่มีแค่สินค้า id 1
 7. ยิง `curl "http://localhost:5100/reports/products?minId=50&maxId=10" -H "Authorization: Bearer <token>"` (ช่วงกลับด้าน) — ควรได้ 400 พร้อม `{"message":"minId ต้องไม่มากกว่า maxId"}`
 
+## Step 9: ถ้าระบบมีรายงานมากกว่า 500 รายงาน ต้องออกแบบโฟลเดอร์/โค้ดยังไง
+
+โครงสร้างปัจจุบัน (Step 1) — `Reports/` เก็บไฟล์ `.frx` แบนราบทั้งหมด, `Services/` มี service class แยกต่อ 1 รายงาน (`ProductsReportService`), `Program.cs` ประกาศ endpoint ทีละบรรทัดด้วยมือ (`app.MapGet("/reports/products", ...)`) — ใช้ได้ตอนมีไม่กี่รายงาน แต่**ไม่ scale ถึง 500 รายงานแน่นอน**: หา `.frx` ไฟล์ไหนเป็นไฟล์ไหนไม่ได้เมื่ออยู่ในโฟลเดอร์เดียวกันหมด, `Program.cs` จะยาวหลายพันบรรทัด, และแก้รายงานหนึ่งเสี่ยงกระทบรายงานอื่นเพราะไม่มีขอบเขตแยกกันชัดเจน
+
+### 9.1 จัดโฟลเดอร์ตามระบบย่อย เหมือนที่ [00-OVERVIEW.md 2.2](./00-OVERVIEW.md#22-ถ้า-module-เดียวโตจนมีเมนู-20-เมนู-ต้องออกแบบยังไง-แนวทางสำหรับ-ระบบย่อย-ในอนาคต) ทำกับฝั่งเว็บ
+
+หลักการเดียวกันทุกประการ แค่ย้ายมาใช้ฝั่ง .NET — จัดกลุ่มตาม**ระบบย่อยของ ERP** (accounting, inventory, hr, sales, ...) ก่อน แล้วค่อยแบ่งย่อยเป็นรายงานแต่ละตัวภายในระบบย่อยนั้น:
+
+```
+apps/report/
+├── Reports/
+│   ├── Accounting/
+│   │   ├── InvoiceSummary/
+│   │   │   ├── InvoiceSummary.frx
+│   │   │   ├── InvoiceSummaryDto.cs
+│   │   │   └── InvoiceSummaryService.cs
+│   │   ├── MonthlyLedger/
+│   │   │   ├── MonthlyLedger.frx
+│   │   │   ├── MonthlyLedgerDto.cs
+│   │   │   └── MonthlyLedgerService.cs
+│   │   └── ... (รายงานอื่นในกลุ่มบัญชี)
+│   ├── Inventory/
+│   │   ├── StockMovement/
+│   │   │   └── ...
+│   │   └── ... (รายงานอื่นในกลุ่มคลังสินค้า)
+│   ├── HR/
+│   │   └── ...
+│   └── Products/                      ← รายงานเดิมของโปรเจกต์นี้ (ProductsReport) ก็จัดเข้ากลุ่มเดียวกัน
+│       ├── ProductsReport.frx
+│       ├── ProductDto.cs
+│       └── ProductsReportService.cs
+├── Endpoints/
+│   ├── AccountingReportEndpoints.cs    ← รวม endpoint ของกลุ่มบัญชีทั้งหมดไว้ที่เดียว
+│   ├── InventoryReportEndpoints.cs
+│   ├── HRReportEndpoints.cs
+│   └── ProductsReportEndpoints.cs
+└── Program.cs                          ← สั้นลงเหลือแค่ config + เรียก MapXxxReportEndpoints() ทีละกลุ่ม
+```
+
+- **1 รายงาน = 1 โฟลเดอร์ที่มีทั้ง `.frx` + DTO + service อยู่ด้วยกัน** — ย้ายจากที่ Step 1 แยก `Reports/`/`Models/`/`Services/` เป็น 3 โฟลเดอร์คู่ขนานกัน (ต้องเปิด 3 ที่เพื่อดูรายงานเดียว) มาเป็นแบบ **feature folder** ที่ไฟล์ทุกอย่างของรายงานนั้นอยู่ด้วยกันในที่เดียว หาง่ายกว่ามากเมื่อมีเป็นร้อย ๆ รายงาน — เหตุผลเดียวกับที่ `modules/products/` ฝั่งเว็บรวม `product-api.ts` กับ `components/` ไว้ด้วยกัน (ดู [00-OVERVIEW.md 2.1](./00-OVERVIEW.md#21-ทำไม-appswebsrc-ถึงมีทั้ง-modules-และ-componentslib))
+- **จัดกลุ่มระดับบนสุดตามระบบย่อย ไม่ใช่ตามประเภทไฟล์** — `Reports/Accounting/`, `Reports/Inventory/` แทนที่จะเป็น `Reports/`, `Models/`, `Services/` แบนราบ — เป็นกติกาเดียวกับที่ [00-OVERVIEW.md 2.2](./00-OVERVIEW.md#22-ถ้า-module-เดียวโตจนมีเมนู-20-เมนู-ต้องออกแบบยังไง-แนวทางสำหรับ-ระบบย่อย-ในอนาคต) แนะนำไว้กับ `modules/accounting/invoices/` ฝั่งเว็บ — คนละภาษา แต่หลักการจัดโครงสร้างเดียวกัน
+
+### 9.2 แยก endpoint ออกจาก `Program.cs` เป็นไฟล์ Extension Method ต่อกลุ่ม
+
+`Program.cs` แบบ Minimal API ที่มีแค่ 1 endpoint (Step 2) เขียน `app.MapGet(...)` ตรง ๆ ในไฟล์เดียวได้สบาย แต่พอมี 500 endpoint จะยาวจัดการไม่ไหว — ใช้ pattern **endpoint group extension method** ของ ASP.NET Core แยกทะเบียน endpoint ออกไปเป็นไฟล์ต่อกลุ่ม:
+
+```csharp
+// Endpoints/AccountingReportEndpoints.cs
+public static class AccountingReportEndpoints
+{
+    public static void MapAccountingReportEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/reports/accounting").RequireAuthorization();
+
+        group.MapGet("/invoice-summary", async (IInvoiceSummaryService svc, int? minId, int? maxId) =>
+        {
+            var pdf = await svc.GeneratePdfAsync(minId, maxId);
+            return Results.File(pdf, "application/pdf", "invoice-summary.pdf");
+        });
+
+        group.MapGet("/monthly-ledger", async (IMonthlyLedgerService svc, int year, int month) =>
+        {
+            var pdf = await svc.GeneratePdfAsync(year, month);
+            return Results.File(pdf, "application/pdf", "monthly-ledger.pdf");
+        });
+
+        // ... รายงานอื่นในกลุ่มบัญชี
+    }
+}
+```
+
+```csharp
+// Program.cs — สั้นลงเหลือแค่เรียกแต่ละกลุ่ม
+app.MapProductsReportEndpoints();
+app.MapAccountingReportEndpoints();
+app.MapInventoryReportEndpoints();
+app.MapHRReportEndpoints();
+```
+
+- **`app.MapGroup("/reports/accounting")`** — ฟีเจอร์ของ ASP.NET Core (ตั้งแต่ .NET 7) สำหรับ**จัดกลุ่ม route ที่มี prefix ร่วมกัน** พร้อมตั้งค่าที่ใช้ร่วมกันได้ครั้งเดียว (เช่น `.RequireAuthorization()` ตั้งที่ group แทนที่ต้องเขียน `.RequireAuthorization()` ต่อท้ายทุก endpoint แบบ Step 2)
+- **แยกไฟล์ตามระบบย่อยเหมือน 9.1** — คนที่ดูแลรายงานกลุ่มบัญชีแก้แค่ `AccountingReportEndpoints.cs` ไม่ต้องแตะไฟล์เดียวกับคนที่ดูแลกลุ่มคลังสินค้า — ได้ประโยชน์เรื่องหลาย dev ทำงานพร้อมกันแบบเดียวกับที่ [00-OVERVIEW.md 2.3](./00-OVERVIEW.md#23-หลาย-dev-ทำงานพร้อมกันในระบบ-erp-เดียวกัน--โครงสร้างนี้ช่วยยังไง) อธิบายไว้ฝั่งเว็บ
+- **`Program.cs` เหลือแค่ "รายการกลุ่ม"** — เทียบเท่ากับที่ `app.module.ts` ฝั่ง NestJS มีแค่ `imports: [AccountingModule, InventoryModule, ...]` (ดู [02-API.md Step 2.3](./02-API.md#23-feature-modules-และ-global-guard)) ไม่ต้องรู้รายละเอียดว่าแต่ละ module มีกี่ endpoint ข้างใน
+
+### 9.3 Dependency Injection ต้อง register เป็นกลุ่มเช่นกัน ไม่ใช่ทีละ service
+
+Step 2 register service ทีละบรรทัดด้วยมือ (`builder.Services.AddScoped<IProductsReportService, ProductsReportService>();`) — พอมี 500 service จะเป็นอีกจุดที่ `Program.cs` บวมและลืมง่าย ให้เขียน extension method รวม registration ต่อกลุ่มเหมือนกัน:
+
+```csharp
+// Reports/Accounting/AccountingReportServiceCollectionExtensions.cs
+public static class AccountingReportServiceCollectionExtensions
+{
+    public static IServiceCollection AddAccountingReportServices(this IServiceCollection services)
+    {
+        services.AddScoped<IInvoiceSummaryService, InvoiceSummaryService>();
+        services.AddScoped<IMonthlyLedgerService, MonthlyLedgerService>();
+        // ...
+        return services;
+    }
+}
+```
+
+```csharp
+// Program.cs
+builder.Services.AddProductsReportServices();
+builder.Services.AddAccountingReportServices();
+builder.Services.AddInventoryReportServices();
+```
+
+### 9.4 ทางเลือกที่ต้องพิจารณาเพิ่มเมื่อจำนวนรายงานเยอะขนาดนี้
+
+- **Route ต่อกลุ่มระบบย่อย** — `/reports/accounting/invoice-summary`, `/reports/inventory/stock-movement` แทนที่จะแบนราบทั้งหมดใต้ `/reports/` เฉย ๆ (เหมือนที่ 9.2 ตั้ง prefix ผ่าน `MapGroup`) ทำให้ดู Swagger UI (ที่เปิดไว้อยู่แล้วตาม Step 2) แล้วเห็นกลุ่มชัดเจน ไม่ใช่ endpoint 500 ตัวเรียงกันแบนราบ
+- **ตรวจสอบสิทธิ์ต่อรายงาน ไม่ใช่แค่ "login แล้วดูได้หมด"** — ตอนนี้ `RequireAuthorization()` แค่เช็คว่า login (มี token ที่ valid) เท่านั้น (ดู Step 2.3) ไม่ได้เช็ค role/สิทธิ์เฉพาะรายงาน พอมี 500 รายงานที่มักมีระดับความอ่อนไหวต่างกันมาก (เช่น รายงานเงินเดือน HR ไม่ควรให้พนักงานทั่วไปเห็น) ควรเพิ่ม policy-based authorization ของ ASP.NET Core (`.RequireAuthorization("HR.ViewSalaryReport")`) ต่อ endpoint หรือต่อกลุ่ม แทนการเปิดกว้างเหมือนกันหมดแบบตอนนี้
+- **แคช/คิวสำหรับรายงานที่หนัก** — รายงานบางตัวในจำนวน 500 นี้อาจ query ข้อมูลจำนวนมาก/ใช้เวลานาน (ต่างจาก `ProductsReport` ที่เบา) ควรแยกแนวทางระหว่าง "รายงานเบาที่ generate สด ๆ ทุกครั้ง" (แบบ pattern เดิมของโปรเจกต์นี้) กับ "รายงานหนักที่ควร generate แบบ async/background job แล้วแจ้งเตือนเมื่อเสร็จ" — ไม่ใช่ทุกรายงานควรใช้ pattern เดียวกับ `ProductsReport`
+- **Naming convention ที่บังคับใช้จริงจัง** — เมื่อมี 500 ไฟล์ `.frx` ชื่อไฟล์/namespace ต้องสอดคล้องกันเป๊ะ (เช่น `{ระบบย่อย}/{ชื่อรายงาน}/{ชื่อรายงาน}.frx` เสมอ) ไม่งั้นจะหาไฟล์ไม่เจอทั้งที่โฟลเดอร์จัดกลุ่มไว้ดีแล้วก็ตาม — ควรเขียนเป็นกฎทีมชัดเจนตั้งแต่รายงานที่ 2-3 ไม่ใช่รอให้ถึง 500 แล้วค่อยมาแก้
+
 ---
 
 **สรุปเส้นทางข้อมูล**: ผู้ใช้กด "ออกรายงาน PDF" ที่ `ProductList` (`modules/products/components/ProductList.tsx`) → `previewProductsReport()` เปิดแท็บเปล่าไว้ก่อน → `fetch` ไปที่ `apps/report` แนบ JWT token เดิม → `apps/report`'s `JwtAuthGuard`-เทียบเท่า (`RequireAuthorization()`) ตรวจ token ด้วย secret เดียวกับ `apps/api` → ส่งต่อ token เดิมไปเรียก `GET /products` ของ `apps/api` → ได้ข้อมูลสินค้าที่ไม่มี `costPrice` (เพราะ `apps/api` กรองไว้แล้ว) → แปลงเป็น `DataTable` → bind เข้ากับ `ProductsReport.frx` ผ่าน FastReport → export เป็น PDF bytes → ตอบกลับเป็น HTTP response → ฝั่งเว็บอ่านเป็น `Blob` → สร้าง `blob:` URL → ตั้งเป็น `location.href` ของแท็บที่เปิดไว้ → ผู้ใช้เห็น PDF preview ทันที
