@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report ScriptLanguage="CSharp" ReportInfo.Created="01/01/2026 00:00:00" ReportInfo.Modified="01/01/2026 00:00:00" ReportInfo.CreatorVersion="2026.2.3.0">
+  <Dictionary>
+    <TableDataSource Name="Products" ReferenceName="Products" DataType="System.Data.DataTable" Enabled="true">
+      <Column Name="Id" DataType="System.Int32"/>
+      <Column Name="Name" DataType="System.String"/>
+      <Column Name="Price" DataType="System.Decimal"/>
+      <Column Name="Stock" DataType="System.Int32"/>
+      <Column Name="CreatedAt" DataType="System.DateTime"/>
+    </TableDataSource>
+  </Dictionary>
+  <ReportPage Name="Page1" PaperWidth="210" PaperHeight="297" LeftMargin="10" TopMargin="10" RightMargin="10" BottomMargin="10">
+    <ReportTitleBand Name="ReportTitle1" Width="718.2" Height="56.7">
+      <TextObject Name="Text1" Width="718.2" Height="28.35" Text="รายงานสินค้า (Products Report)" Font="Tahoma, 14pt, style=Bold"/>
+      <TextObject Name="Text2" Width="718.2" Height="18.9" Top="28.35" Text="[Date]" Format="Date" Format.Format="dd/MM/yyyy HH:mm" Font="Tahoma, 9pt"/>
+    </ReportTitleBand>
+    <PageHeaderBand Name="PageHeader1" Width="718.2" Height="22.68" Top="60">
+      <TextObject Name="Header_Id" Width="56.7" Height="22.68" Text="ID" Font="Tahoma, 9pt, style=Bold" Border.Lines="All"/>
+      <TextObject Name="Header_Name" Width="255.1" Height="22.68" Left="56.7" Text="ชื่อสินค้า" Font="Tahoma, 9pt, style=Bold" Border.Lines="All"/>
+      <TextObject Name="Header_Price" Width="132.3" Height="22.68" Left="311.8" Text="ราคา" Font="Tahoma, 9pt, style=Bold" Border.Lines="All" HorzAlign="Right"/>
+      <TextObject Name="Header_Stock" Width="132.3" Height="22.68" Left="444.1" Text="สต๊อก" Font="Tahoma, 9pt, style=Bold" Border.Lines="All" HorzAlign="Right"/>
+      <TextObject Name="Header_CreatedAt" Width="132.3" Height="22.68" Left="576.4" Text="วันที่สร้าง" Font="Tahoma, 9pt, style=Bold" Border.Lines="All"/>
+    </PageHeaderBand>
+    <DataBand Name="Data1" Width="718.2" Height="18.9" Top="86" DataSource="Products">
+      <TextObject Name="Cell_Id" Width="56.7" Height="18.9" Text="[Products.Id]" Font="Tahoma, 9pt" Border.Lines="All"/>
+      <TextObject Name="Cell_Name" Width="255.1" Height="18.9" Left="56.7" Text="[Products.Name]" Font="Tahoma, 9pt" Border.Lines="All"/>
+      <TextObject Name="Cell_Price" Width="132.3" Height="18.9" Left="311.8" Text="[Products.Price]" Format="Number" Format.DecimalDigits="2" Font="Tahoma, 9pt" Border.Lines="All" HorzAlign="Right"/>
+      <TextObject Name="Cell_Stock" Width="132.3" Height="18.9" Left="444.1" Text="[Products.Stock]" Font="Tahoma, 9pt" Border.Lines="All" HorzAlign="Right"/>
+      <TextObject Name="Cell_CreatedAt" Width="132.3" Height="18.9" Left="576.4" Text="[Products.CreatedAt]" Format="Date" Format.Format="dd/MM/yyyy" Font="Tahoma, 9pt" Border.Lines="All"/>
+    </DataBand>
+    <PageFooterBand Name="PageFooter1" Width="718.2" Height="18.9" Top="108">
+      <TextObject Name="Footer_Page" Width="718.2" Height="18.9" Text="หน้า [Page#] จาก [TotalPages#]" Font="Tahoma, 8pt" HorzAlign="Right"/>
+    </PageFooterBand>
+  </ReportPage>
+</Report>

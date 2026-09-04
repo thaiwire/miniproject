@@ -5,6 +5,11 @@ dist/
 
 apps/api/uploads/
 
+# .NET (apps/report)
+apps/report/bin/
+apps/report/obj/
+apps/report/*.user
+
 .env
 .env.*
 !.env.example

@@ -9,6 +9,7 @@
     "build:shared": "npm run build -w @mini-project/shared-types",
     "dev:api": "npm run start:dev -w @mini-project/api",
     "dev:web": "npm run dev -w @mini-project/web",
+    "dev:report": "dotnet run --project apps/report",
     "build:api": "npm run build -w @mini-project/api",
     "build:web": "npm run build -w @mini-project/web"
   }
