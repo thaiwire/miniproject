@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getProducts } from "@/lib/product-api";
-import { previewProductsReport } from "@/lib/report-api";
+import { getProducts } from "@/modules/products/product-api";
+import { previewProductsReport } from "@/modules/reports/report-api";
 import { ApiError } from "@/lib/api";
-import DeleteProductButton from "@/components/DeleteProductButton";
+import DeleteProductButton from "@/modules/products/components/DeleteProductButton";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { Product } from "@mini-project/shared-types";
 

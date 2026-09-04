@@ -1,7 +1,7 @@
 "use client"; // บรรทัดแรกสุดของไฟล์ ต้องมีเสมอสำหรับ Client Component
 
 import { useState } from "react";
-import { deleteProduct } from "@/lib/product-api";
+import { deleteProduct } from "@/modules/products/product-api";
 import { Button } from "@/components/ui/button";
 
 interface DeleteProductButtonProps {

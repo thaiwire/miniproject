@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch } from "@/lib/api";
 import type { User, UpdateProfileInput } from "@mini-project/shared-types";
 
 export function getProfile(): Promise<User> {

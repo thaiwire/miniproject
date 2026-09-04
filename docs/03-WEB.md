@@ -26,7 +26,7 @@
 
 - [postcss.config.mjs](../apps/web/postcss.config.mjs) — บอก build tool ให้ประมวลผล Tailwind
 - [components.json](../apps/web/components.json) — shadcn ใช้ไฟล์นี้จำ path/style ที่เลือกไว้ตอน setup
-- [src/lib/utils.ts](../apps/web/src/lib/utils.ts) — export ฟังก์ชัน `cn()` ที่ shadcn component แทบทุกตัวใช้รวม className หลายอันเข้าด้วยกันแบบฉลาด (จัดการ className ที่ซ้ำ/ขัดแย้งกันให้)
+- [src/lib/utils.ts](../apps/web/src/lib/utils.ts) — export ฟังก์ชัน `cn()` ที่ shadcn component แทบทุกตัวใช้รวม className หลายอันเข้าด้วยกันแบบฉลาด (จัดการ className ที่ซ้ำ/ขัดแย้งกันให้) — ไฟล์นี้อยู่ใน `lib/` เพราะเป็นของกลางที่ทุก module ใช้ร่วมกันจริง ๆ ไม่ผูกกับ feature ไหนโดยเฉพาะ (ดูกติกาแบ่ง `modules/` vs `lib/` เต็ม ๆ ใน [00-OVERVIEW.md](./00-OVERVIEW.md#21-ทำไม-appswebsrc-ถึงมีทั้ง-modules-และ-componentslib))
 - [src/app/globals.css](../apps/web/src/app/globals.css) — จุดเดียวที่ import Tailwind (`@import "tailwindcss";`) และประกาศ **สี** ของทั้งระบบผ่าน CSS variable (`--primary`, `--card`, `--destructive`, ...) แทนที่จะเขียนเลขสีกระจายอยู่ทั่วโค้ด
 
 ตัวอย่างจาก `globals.css` — ปรับสี primary ให้เป็นน้ำเงินแทนสี default (เกือบดำ) ที่ shadcn สร้างให้:
@@ -133,14 +133,16 @@ export function getCurrentUser(): DecodedUser | null {
 src/app/
 ├── layout.tsx              ← root layout (Step 2) ครอบทุกหน้า
 ├── page.tsx                ← "/" redirect ไป /products
-├── login/page.tsx          ← ไม่ต้อง login, ไม่มี sidebar
-├── register/page.tsx       ← ไม่ต้อง login, ไม่มี sidebar
+├── login/page.tsx          ← ไม่ต้อง login, ไม่มี sidebar (render <LoginForm /> จาก modules/auth)
+├── register/page.tsx       ← ไม่ต้อง login, ไม่มี sidebar (render <RegisterForm /> จาก modules/auth)
 └── (authenticated)/        ← route group: ไม่กระทบ URL แต่แชร์ layout เดียวกัน
     ├── layout.tsx           ← เช็ค token + sidebar + topbar (ไฟล์นี้)
-    ├── products/page.tsx    ← "/products"
-    ├── products/new/page.tsx← "/products/new"
-    └── profile/page.tsx     ← "/profile"
+    ├── products/page.tsx    ← "/products" (render <ProductList /> จาก modules/products)
+    ├── products/new/page.tsx← "/products/new" (render <ProductForm /> จาก modules/products)
+    └── profile/page.tsx     ← "/profile" (render <ProfileForm /> จาก modules/profile)
 ```
+
+**หมายเหตุ**: `app/` มีหน้าที่แค่ "ประกาศ route" เท่านั้น component ที่มี logic จริงทั้งหมดย้ายไปอยู่ใน `src/modules/<ชื่อ feature>/components/` แล้ว (ดู Step 6.2 และ [00-OVERVIEW.md](./00-OVERVIEW.md#21-ทำไม-appswebsrc-ถึงมีทั้ง-modules-และ-componentslib) สำหรับกติกาการจัดโครงสร้างแบบ module-based)
 
 ```tsx
 "use client";
@@ -240,7 +242,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 - **เช็ค `res.status === 401` ก่อนเช็ค `res.ok` ทั่วไป** — 401 หมายถึง "token ใช้ไม่ได้แล้ว" (หมดอายุ หรือไม่มี token) ซึ่งควร**บังคับ login ใหม่ทันที** ต่างจาก error ทั่วไป (400, 404) ที่แค่โชว์ message ให้ user เห็นในฟอร์มพอ
 - **`window.location.href = "/login"` ไม่ใช่ `router.push`** — เพราะ `apiFetch` เป็นฟังก์ชันธรรมดา ไม่ใช่ React component จึงเรียก hook อย่าง `useRouter()` ไม่ได้ ต้องใช้ browser API ตรง ๆ แทน (แลกกับการ reload หน้าทั้งหน้า ซึ่งยอมรับได้เพราะกรณีนี้คือ "session หมดอายุ" อยู่แล้ว)
 
-## Step 6: หน้ารายการสินค้า (Client Component แบบ Fetch-on-mount) — [src/components/ProductList.tsx](../apps/web/src/components/ProductList.tsx)
+## Step 6: หน้ารายการสินค้า (Client Component แบบ Fetch-on-mount) — [src/modules/products/components/ProductList.tsx](../apps/web/src/modules/products/components/ProductList.tsx)
 
 ```tsx
 "use client";
@@ -299,7 +301,7 @@ export default function ProductsPage() {
 
 ทางแก้: ส่งฟังก์ชัน `fetchProducts` (ที่มาจาก `ProductList`) ลงไปเป็น prop ชื่อ `onDeleted` ให้ `DeleteProductButton` เรียกกลับขึ้นมาแทน — เป็น pattern พื้นฐานของ React ที่เรียกว่า **"lifting state up"**: component ลูก (`DeleteProductButton`) ไม่ต้องรู้ว่า parent จะ refresh ข้อมูลยังไง แค่เรียก callback ที่ parent ส่งมาให้พอ
 
-## Step 7: ปุ่มลบสินค้า — [src/components/DeleteProductButton.tsx](../apps/web/src/components/DeleteProductButton.tsx)
+## Step 7: ปุ่มลบสินค้า — [src/modules/products/components/DeleteProductButton.tsx](../apps/web/src/modules/products/components/DeleteProductButton.tsx)
 
 ```tsx
 "use client";
@@ -338,7 +340,7 @@ export default function DeleteProductButton({ productId, onDeleted }: DeleteProd
 - **`useState<boolean>(false)` (`isDeleting`)** — ใช้ปิดปุ่มระหว่างรอ API ตอบกลับ (ป้องกันกดซ้ำ) และเปลี่ยนข้อความปุ่มเป็น "กำลังลบ..." ให้ผู้ใช้รู้ว่าระบบกำลังทำงาน
 - **`onDeleted()`** — ดูรายละเอียดที่ Step 6.3
 
-## Step 8: หน้า Login — [src/app/login/page.tsx](../apps/web/src/app/login/page.tsx) + [src/components/LoginForm.tsx](../apps/web/src/components/LoginForm.tsx)
+## Step 8: หน้า Login — [src/app/login/page.tsx](../apps/web/src/app/login/page.tsx) + [src/modules/auth/components/LoginForm.tsx](../apps/web/src/modules/auth/components/LoginForm.tsx)
 
 ```tsx
 // app/login/page.tsx
@@ -375,7 +377,7 @@ async function onSubmit(data: LoginFormValues) {
 ```
 
 - ใช้ react-hook-form + zod แบบเดียวกับ `ProductForm` ทุกประการ (ดู [Step 12](#step-12-ฟอร์มเพิ่มสินค้า--srccomponentsproductformtsx) เรื่อง `z.infer`) — โปรเจกต์นี้ยึด pattern เดียวสำหรับทุกฟอร์มเพื่อให้คาดเดาได้ ไม่ต้องเรียนรู้วิธีใหม่ทุกครั้งที่เจอฟอร์มใหม่
-- **`login(data)`** — เรียกจาก [src/lib/auth-api.ts](../apps/web/src/lib/auth-api.ts) ไปที่ `POST /auth/login` (endpoint `@Public()` ไม่ต้องมี token) ได้ `AuthTokens` กลับมา (`accessToken` + `refreshToken`)
+- **`login(data)`** — เรียกจาก [src/modules/auth/auth-api.ts](../apps/web/src/modules/auth/auth-api.ts) ไปที่ `POST /auth/login` (endpoint `@Public()` ไม่ต้องมี token) ได้ `AuthTokens` กลับมา (`accessToken` + `refreshToken`)
 - **`setTokens(tokens)`** — บันทึกลง `localStorage` (ดู Step 3) แล้ว **`router.push("/products")`** — ทันทีที่ไปถึงหน้านั้น `AuthenticatedLayout` (Step 4) จะเช็คเจอ token แล้วปล่อยให้เข้าได้
 
 ### 8.2 ปุ่มดู/ซ่อนรหัสผ่าน — [src/components/ui/password-input.tsx](../apps/web/src/components/ui/password-input.tsx)
@@ -408,7 +410,7 @@ const PasswordInput = React.forwardRef<HTMLInputElement, React.ComponentProps<"i
 - **`tabIndex={-1}` บนปุ่ม** — กันไม่ให้กด Tab แล้วโฟกัสมาที่ปุ่มนี้ (ซึ่งจะรบกวนลำดับการกรอกฟอร์มปกติ: email → password → submit) ปุ่มนี้กดด้วยเมาส์/แตะเท่านั้น
 - ใช้ `<PasswordInput>` แทน `<Input type="password">` เดิมในทั้ง 3 ที่: `LoginForm`, `RegisterForm`, `ProfileForm`
 
-## Step 9: หน้าสมัครสมาชิก — [src/app/register/page.tsx](../apps/web/src/app/register/page.tsx) + [src/components/RegisterForm.tsx](../apps/web/src/components/RegisterForm.tsx)
+## Step 9: หน้าสมัครสมาชิก — [src/app/register/page.tsx](../apps/web/src/app/register/page.tsx) + [src/modules/auth/components/RegisterForm.tsx](../apps/web/src/modules/auth/components/RegisterForm.tsx)
 
 ```typescript
 async function onSubmit(data: RegisterFormValues) {
@@ -444,7 +446,7 @@ async function onSubmit(data: RegisterFormValues) {
 └─────────────┴─────────────────────────────┘
 ```
 
-### 10.1 Sidebar — [src/components/Sidebar.tsx](../apps/web/src/components/Sidebar.tsx)
+### 10.1 Sidebar — [src/components/layout/Sidebar.tsx](../apps/web/src/components/layout/Sidebar.tsx)
 
 ```tsx
 "use client";
@@ -485,7 +487,7 @@ export default function Sidebar() {
 - **`usePathname()`** — hook ของ Next.js คืน URL path ปัจจุบัน (เช่น `/products`) ใช้เทียบกับ `item.href` เพื่อรู้ว่าเมนูไหน "active" อยู่ (ทำให้ต้องเป็น Client Component เพราะ hook ตัวนี้ใช้ได้เฉพาะฝั่ง client)
 - **`cn(...)`** จาก `@/lib/utils` — เลือก className ตามเงื่อนไข `isActive` แบบอ่านง่าย (สีน้ำเงินตอน active, เทาตอนไม่ active)
 
-### 10.2 Topbar — [src/components/Topbar.tsx](../apps/web/src/components/Topbar.tsx)
+### 10.2 Topbar — [src/components/layout/Topbar.tsx](../apps/web/src/components/layout/Topbar.tsx)
 
 ```tsx
 export default function Topbar() {
@@ -499,7 +501,7 @@ export default function Topbar() {
 
 component สั้นมาก เพราะหน้าที่หลักคือเป็น "กรอบ" ที่จัดตำแหน่ง `UserMenu` ไว้ชิดขวา (`justify-end`) — พื้นหลังขาวมีเส้นขอบล่างบาง ๆ (`border-b`) แยกจาก sidebar สีเข้มด้านซ้ายให้ชัดเจน
 
-### 10.3 เมนูผู้ใช้แบบ Dropdown — [src/components/UserMenu.tsx](../apps/web/src/components/UserMenu.tsx)
+### 10.3 เมนูผู้ใช้แบบ Dropdown — [src/components/layout/UserMenu.tsx](../apps/web/src/components/layout/UserMenu.tsx)
 
 ```tsx
 interface UserMenuProps {
@@ -541,7 +543,7 @@ export default function UserMenu({ variant = "light" }: UserMenuProps) {
 - **`DropdownMenuGroup` ครอบ `DropdownMenuLabel`** — เป็น requirement เฉพาะของ shadcn เวอร์ชันที่ใช้ในโปรเจกต์นี้ (สร้างจาก [Base UI](https://base-ui.com/) ไม่ใช่ Radix UI ที่ตัวอย่าง shadcn ส่วนใหญ่บนอินเทอร์เน็ตใช้) — ถ้าใช้ `DropdownMenuLabel` เดี่ยว ๆ โดยไม่มี `DropdownMenuGroup` ครอบจะ error ตอน runtime ทันที (มือใหม่เจอปัญหานี้บ่อยเวลา copy โค้ดตัวอย่างจากเว็บอื่นมาใช้ตรง ๆ)
 - **"แก้ไขโปรไฟล์" และ "ออกจากระบบ"** — สองปุ่มนี้เป็นทางเข้าเดียวของฟีเจอร์ profile และ logout ในทั้งแอป
 
-## Step 11: หน้าแก้ไขโปรไฟล์ — [src/app/(authenticated)/profile/page.tsx](../apps/web/src/app/(authenticated)/profile/page.tsx) + [src/components/ProfileForm.tsx](../apps/web/src/components/ProfileForm.tsx)
+## Step 11: หน้าแก้ไขโปรไฟล์ — [src/app/(authenticated)/profile/page.tsx](../apps/web/src/app/(authenticated)/profile/page.tsx) + [src/modules/profile/components/ProfileForm.tsx](../apps/web/src/modules/profile/components/ProfileForm.tsx)
 
 ```typescript
 const profileSchema = z.object({
@@ -582,7 +584,7 @@ async function onSubmit(data: ProfileFormValues) {
 - **`...(data.password ? { password: data.password } : {})`** — spread แบบมีเงื่อนไข ถ้า `data.password` เป็น string ว่าง (falsy) จะไม่ใส่ key `password` เข้าไปใน object ที่ส่งไป backend เลย ทำให้ `UpdateProfileDto` ฝั่ง backend เห็นว่า field นี้ไม่ได้ส่งมา (`undefined`) จึงไม่แตะรหัสผ่านเดิม (ดู [02-API.md](./02-API.md) เรื่อง `UserService.updateProfile`)
 - **อีเมลเป็น `<Input disabled>`** — แสดงให้เห็นแต่แก้ไม่ได้ เพราะอีเมลผูกกับการ login โดยตรง เปลี่ยนได้จะกระทบระบบ auth ทั้งหมด (โปรเจกต์นี้เลือกไม่รองรับการเปลี่ยนอีเมลเพื่อความง่าย)
 
-## Step 12: ฟอร์มเพิ่มสินค้า — [src/components/ProductForm.tsx](../apps/web/src/components/ProductForm.tsx)
+## Step 12: ฟอร์มเพิ่มสินค้า — [src/modules/products/components/ProductForm.tsx](../apps/web/src/modules/products/components/ProductForm.tsx)
 
 ไฟล์นี้เป็นต้นแบบของฟอร์มทุกฟอร์มในแอป (login/register/profile ก็เลียนแบบโครงสร้างนี้) รวม 3 concept: **zod** (schema validation), **react-hook-form** (จัดการ form state), และการเรียก API ผ่าน shadcn component
 
@@ -668,9 +670,14 @@ async function onSubmit(data: ProductFormOutput) {
 7. คลิกเมนูมุมขวาบน → "แก้ไขโปรไฟล์" — ควรเห็นฟอร์มที่มีชื่อปัจจุบันกรอกไว้ให้แล้ว ลองแก้ชื่อแล้วบันทึก ควรเห็นข้อความ "บันทึกข้อมูลสำเร็จ" (Step 11)
 8. คลิกเมนูมุมขวาบน → "ออกจากระบบ" — ควรเด้งกลับ `/login` แล้วถ้าลองกด back หรือพิมพ์ URL `/products` เองควรถูกเด้งกลับ `/login` อีกครั้ง (ทดสอบว่า token ถูกลบจริง)
 9. ลองปิด backend (`Ctrl+C` ที่ terminal ของ `dev:api`) แล้ว login/สร้างสินค้าอีกครั้ง — ควรเห็น error message แสดงใต้ปุ่ม (ทดสอบ error handling ผ่าน `ApiError`)
+10. ที่หน้า `/products` กด "ออกรายงาน PDF" (มุมขวาบนของตาราง) — ต้องรัน `npm run dev:report` ไว้ก่อน (ดู [01-MAIN-PROJECT.md](./01-MAIN-PROJECT.md) Step 3.6) ควรเห็น tab ใหม่เปิดขึ้นมาแสดงไฟล์ PDF รายชื่อสินค้า (ไม่ใช่ดาวน์โหลดไฟล์อัตโนมัติ) รายละเอียดเต็ม ๆ อยู่ใน [04-REPORT.md](./04-REPORT.md)
 
 ---
 
-**สรุปเส้นทางข้อมูลทั้งหมด** (ครบทั้ง 3 เอกสาร): ผู้ใช้กรอกอีเมล/รหัสผ่านที่ `LoginForm` → zod validate ฝั่ง client → `login()` เรียก `apiFetch` (ไม่มี token ตอนนี้ เพราะยังไม่ login) → ยิง `POST /auth/login` → NestJS's `AuthService.validateUser()` เช็ค bcrypt hash → ออก JWT คืนมาเป็น `AuthTokens` → `setTokens()` เก็บลง `localStorage` → `router.push('/products')` → `AuthenticatedLayout` เช็คเจอ token → render `Sidebar`/`Topbar`/`ProductList` → `ProductList` เรียก `getProducts()` ผ่าน `apiFetch` ซึ่งตอนนี้แนบ `Authorization: Bearer <token>` อัตโนมัติ → ยิง `GET /products` → ผ่าน `JwtAuthGuard` (เช็ค token ถูกต้อง) → `ProductService.findAll()` ดึงข้อมูลแบบแบ่งหน้า → ตอบกลับเป็น `PaginatedResult<Product>` → หน้าเว็บ render ตาราง
+**สรุปเส้นทางข้อมูลทั้งหมด** (ครบทั้ง 4 เอกสาร): ผู้ใช้กรอกอีเมล/รหัสผ่านที่ `LoginForm` → zod validate ฝั่ง client → `login()` เรียก `apiFetch` (ไม่มี token ตอนนี้ เพราะยังไม่ login) → ยิง `POST /auth/login` → NestJS's `AuthService.validateUser()` เช็ค bcrypt hash → ออก JWT คืนมาเป็น `AuthTokens` → `setTokens()` เก็บลง `localStorage` → `router.push('/products')` → `AuthenticatedLayout` เช็คเจอ token → render `Sidebar`/`Topbar`/`ProductList` → `ProductList` เรียก `getProducts()` ผ่าน `apiFetch` ซึ่งตอนนี้แนบ `Authorization: Bearer <token>` อัตโนมัติ → ยิง `GET /products` → ผ่าน `JwtAuthGuard` (เช็ค token ถูกต้อง) → `ProductService.findAll()` ดึงข้อมูลแบบแบ่งหน้า → ตอบกลับเป็น `PaginatedResult<Product>` → หน้าเว็บ render ตาราง
 
 ทุก type ที่ปรากฏตลอดเส้นทางนี้ (`LoginInput`, `AuthTokens`, `Product`, `PaginatedResult`) มาจาก `packages/shared-types` เดียวกันทั้งหมด — นี่คือเหตุผลที่แท้จริงว่าทำไมโปรเจกต์นี้ถึงจัดเป็น monorepo แทนที่จะแยก repo ของ web กับ api ออกจากกัน และเหตุผลที่ token storage (Step 3) กลายเป็นจุดตัดสินใจที่กระเทือนถึงโครงสร้างเกือบทุกไฟล์ในฝั่งเว็บ — เป็นตัวอย่างที่ดีว่า **การตัดสินใจสถาปัตยกรรมเล็ก ๆ จุดเดียวสามารถส่งผลกระทบเป็นวงกว้างได้** ถ้าเลือกผิดจังหวะ
+
+---
+
+**ต่อไป**: อ่าน [04-REPORT.md](./04-REPORT.md) เพื่อดูว่าปุ่ม "ออกรายงาน PDF" ที่หน้า `/products` เชื่อมไปเรียก report service (.NET) อย่างไร

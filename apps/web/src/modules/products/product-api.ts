@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch } from "@/lib/api";
 // import type จาก shared-types แทนการประกาศ interface ซ้ำเอง
 // -> ถ้า backend เปลี่ยน shape ของ Product ฝั่งนี้จะ error ให้เห็นทันทีตอน build ไม่ต้องรอ runtime
 import type {

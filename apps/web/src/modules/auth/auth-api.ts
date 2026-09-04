@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch } from "@/lib/api";
 import type { LoginInput, RegisterInput, AuthTokens, User } from "@mini-project/shared-types";
 
 export function login(input: LoginInput): Promise<AuthTokens> {

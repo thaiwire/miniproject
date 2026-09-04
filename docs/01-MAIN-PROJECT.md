@@ -22,6 +22,7 @@
     "build:shared": "npm run build -w @mini-project/shared-types",
     "dev:api": "npm run start:dev -w @mini-project/api",
     "dev:web": "npm run dev -w @mini-project/web",
+    "dev:report": "dotnet run --project apps/report",
     "build:api": "npm run build -w @mini-project/api",
     "build:web": "npm run build -w @mini-project/web"
   }
@@ -32,10 +33,12 @@
 
 1. **`"private": true`** — กัน publish ขึ้น npm registry โดยไม่ตั้งใจ (เพราะนี่ไม่ใช่ package ที่จะแจกใคร)
 2. **`"workspaces": ["apps/*", "packages/*"]`** — นี่คือหัวใจของ npm workspaces บอก npm ว่า "ทุกโฟลเดอร์ย่อยใน `apps/` และ `packages/` ที่มี `package.json` ของตัวเอง ให้ถือเป็น sub-package ของ workspace นี้"
-   - ผลลัพธ์: รัน `npm install` ที่ root ครั้งเดียว → npm จะติดตั้ง dependencies ของ **ทั้ง 3 โปรเจกต์ย่อย** (`api`, `web`, `shared-types`) พร้อมกัน และลิงก์ package ที่อ้างถึงกันเอง (เช่น `web` และ `api` ที่ import `@mini-project/shared-types`) แบบ symlink อัตโนมัติ — ไม่ต้อง publish ขึ้น npm จริง
+   - ผลลัพธ์: รัน `npm install` ที่ root ครั้งเดียว → npm จะติดตั้ง dependencies ของ **ทั้ง 3 โปรเจกต์ย่อยที่เป็น npm package** (`api`, `web`, `shared-types`) พร้อมกัน และลิงก์ package ที่อ้างถึงกันเอง (เช่น `web` และ `api` ที่ import `@mini-project/shared-types`) แบบ symlink อัตโนมัติ — ไม่ต้อง publish ขึ้น npm จริง
+   - **`apps/report` ไม่ใช่ npm package** (ไม่มี `package.json`) เพราะเป็นโปรเจกต์ .NET (C#) — npm workspaces จะมองข้ามโฟลเดอร์นี้ไปเฉย ๆ (ไม่ error) ต้องจัดการ dependency ผ่าน `dotnet restore` แยกต่างหาก (ดู [04-REPORT.md](./04-REPORT.md))
 3. **`scripts`** — สคริปต์ช่วยยิงคำสั่งไปยัง workspace ย่อยโดยไม่ต้อง `cd` เข้าไป ใช้ flag `-w <ชื่อ package>` ของ npm
    - `npm run dev:api` เทียบเท่ากับ `cd apps/api && npm run start:dev`
    - `npm run build:shared` เทียบเท่ากับ `cd packages/shared-types && npm run build`
+   - **`npm run dev:report`** ไม่ได้ใช้ `-w` เหมือนตัวอื่น (เพราะ `apps/report` ไม่ใช่ npm workspace) แค่เป็น shortcut ที่ห่อคำสั่ง `dotnet run --project apps/report` ไว้ให้เรียกจาก root ได้สะดวกเหมือนกัน
 
 > **ทำไมต้องรู้เรื่องนี้ก่อน**: มือใหม่มักจะงงว่าทำไมสั่ง `npm install` ที่ folder เดียวแล้วโปรเจกต์ย่อยใช้งานได้หมด — เพราะกลไก workspaces นี่เอง ไม่ต้องเข้าไป `npm install` ทีละโฟลเดอร์
 
@@ -158,7 +161,17 @@ npm run dev:web
 
 จะได้เว็บที่ `http://localhost:3001`
 
-### 3.6 สรุปเป็นตาราง
+### 3.6 รัน report service (ไม่บังคับ — จำเป็นเฉพาะถ้าจะทดสอบปุ่ม "ออกรายงาน PDF")
+
+เปิด terminal ที่ 3:
+
+```bash
+npm run dev:report
+```
+
+จะได้ report service ที่ `http://localhost:5100` ต้องมี `apps/report/.env` ตั้งค่า `JWT_SECRET` (ค่าเดียวกับ `apps/api/.env`) ก่อน — รายละเอียดเต็ม ๆ อยู่ใน [04-REPORT.md](./04-REPORT.md)
+
+### 3.7 สรุปเป็นตาราง
 
 | ลำดับ | คำสั่ง | รันที่ไหน | ทำอะไร |
 |---|---|---|---|
@@ -166,6 +179,7 @@ npm run dev:web
 | 2 | `npm run build:shared` | root | compile shared-types → `dist/` |
 | 3 | `npm run dev:api` | root (terminal แยก) | เปิด backend port 3000 |
 | 4 | `npm run dev:web` | root (terminal แยก) | เปิด frontend port 3001 |
+| 5 (ไม่บังคับ) | `npm run dev:report` | root (terminal แยก) | เปิด report service port 5100 |
 
 > ทำไม backend อยู่ port 3000 แต่ frontend อยู่ port 3001? เพราะเป็นคนละโปรเซสกัน (คนละ server) รันพร้อมกันบนเครื่องเดียวต้องคนละ port ดู [02-API.md](./02-API.md) เรื่อง CORS ประกอบ ว่าทำไมสอง port คุยกันได้ทั้งที่เป็นคนละ origin
 

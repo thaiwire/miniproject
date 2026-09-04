@@ -1,4 +1,4 @@
-import UserMenu from "@/components/UserMenu";
+import UserMenu from "@/components/layout/UserMenu";
 
 export default function Topbar() {
   return (

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { getProfile, updateProfile, uploadAvatar } from "@/lib/user-api";
+import { getProfile, updateProfile, uploadAvatar } from "@/modules/profile/user-api";
 import { ApiError } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";

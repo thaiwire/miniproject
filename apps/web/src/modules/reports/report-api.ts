@@ -1,4 +1,4 @@
-import { getAccessToken } from "./auth-storage";
+import { getAccessToken } from "@/lib/auth-storage";
 
 const REPORT_API_URL = process.env.NEXT_PUBLIC_REPORT_API_URL ?? "http://localhost:5100";
 

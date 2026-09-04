@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { register as registerUser } from "@/lib/auth-api";
+import { register as registerUser } from "@/modules/auth/auth-api";
 import { ApiError } from "@/lib/api";
 import {
   Card,

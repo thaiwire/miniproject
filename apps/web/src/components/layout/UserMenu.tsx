@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser, clearTokens } from "@/lib/auth-storage";
-import { getProfile } from "@/lib/user-api";
+import { getProfile } from "@/modules/profile/user-api";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,

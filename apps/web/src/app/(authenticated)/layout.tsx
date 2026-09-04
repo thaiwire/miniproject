@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth-storage";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
+import Sidebar from "@/components/layout/Sidebar";
+import Topbar from "@/components/layout/Topbar";
 
 // route group นี้ครอบทุกหน้าที่ต้อง login ก่อน (/products, /products/new, /profile)
 // เช็ค token ฝั่ง client เพราะ token เก็บใน localStorage ซึ่ง middleware.ts (รันฝั่ง server) อ่านไม่ได้
