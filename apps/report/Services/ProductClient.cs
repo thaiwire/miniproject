@@ -4,7 +4,7 @@ namespace Report.Services;
 
 public interface IProductClient
 {
-    Task<List<ProductDto>> GetAllProductsAsync(string bearerToken);
+    Task<List<ProductDto>> GetAllProductsAsync(string bearerToken, int? minId = null, int? maxId = null);
 }
 
 // เรียก GET /products ของ apps/api แทนการต่อฐานข้อมูลตรง ๆ
@@ -17,11 +17,15 @@ public class ProductClient(HttpClient httpClient) : IProductClient
     // TODO: ถ้าต้องรองรับเกิน 100 รายการ ค่อยเพิ่ม loop วนทุกหน้าจนกว่า page >= totalPages
     private const int MaxLimit = 100;
 
-    public async Task<List<ProductDto>> GetAllProductsAsync(string bearerToken)
+    public async Task<List<ProductDto>> GetAllProductsAsync(string bearerToken, int? minId = null, int? maxId = null)
     {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/products?page=1&limit={MaxLimit}");
+        // minId/maxId เป็น query param ที่ apps/api เพิ่มไว้กรองช่วง id (ดู PaginationQueryDto)
+        // ปล่อยว่างไว้ = ไม่กรอง เหมือนพฤติกรรมเดิม
+        var queryParams = $"page=1&limit={MaxLimit}";
+        if (minId.HasValue) queryParams += $"&minId={minId.Value}";
+        if (maxId.HasValue) queryParams += $"&maxId={maxId.Value}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/products?{queryParams}");
         request.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
 

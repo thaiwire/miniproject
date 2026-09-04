@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  FindOptionsWhere,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { ProductEntity } from './product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -15,11 +22,39 @@ export class ProductService {
   ) {}
 
   async findAll(query: PaginationQueryDto): Promise<[ProductEntity[], number]> {
+    if (
+      query.minId !== undefined &&
+      query.maxId !== undefined &&
+      query.minId > query.maxId
+    ) {
+      throw new BadRequestException('minId ต้องไม่มากกว่า maxId');
+    }
+
     return this.productRepo.findAndCount({
+      where: this.buildWhere(query.minId, query.maxId),
       order: { id: 'ASC' },
       skip: query.skip,
       take: query.limit,
     });
+  }
+
+  // minId/maxId เป็น optional ทั้งคู่ -> ต้องเลือก TypeORM operator ให้ตรงกับว่ามีค่าไหนบ้าง
+  // (Between ต้องการทั้งสองค่า ใช้ตัวเดียวไม่ได้ถ้ามีแค่ min หรือ max อย่างใดอย่างหนึ่ง)
+  // ห้ามส่ง { id: undefined } เข้า findAndCount เด็ดขาด -> TypeORM throw error ทันที (ต้อง"ไม่มี key นี้เลย" ถ้าไม่กรอง)
+  private buildWhere(
+    minId?: number,
+    maxId?: number,
+  ): FindOptionsWhere<ProductEntity> {
+    if (minId !== undefined && maxId !== undefined) {
+      return { id: Between(minId, maxId) };
+    }
+    if (minId !== undefined) {
+      return { id: MoreThanOrEqual(minId) };
+    }
+    if (maxId !== undefined) {
+      return { id: LessThanOrEqual(maxId) };
+    }
+    return {}; // ไม่กรอง id เลย -> เหมือนพฤติกรรมเดิม
   }
 
   async findOne(id: number): Promise<ProductEntity> {

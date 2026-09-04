@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/products", label: "รายการสินค้า" },
   { href: "/products/new", label: "+ เพิ่มสินค้า" },
+  { href: "/products/report", label: "รายงานตามช่วงรหัส" },
 ];
 
 export default function Sidebar() {

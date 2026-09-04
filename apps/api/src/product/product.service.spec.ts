@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Between, DataSource, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { ProductService } from './product.service.js';
 import { ProductEntity } from './product.entity.js';
@@ -73,12 +73,53 @@ describe('ProductService', () => {
       const [items, total] = await service.findAll(query);
 
       expect(repo.findAndCount).toHaveBeenCalledWith({
+        where: {},
         order: { id: 'ASC' },
         skip: 5, // (page 2 - 1) * limit 5
         take: 5,
       });
       expect(items).toEqual([mockProduct]);
       expect(total).toBe(1);
+    });
+
+    it('should filter by id range when both minId and maxId are given', async () => {
+      vi.mocked(repo.findAndCount).mockResolvedValue([[mockProduct], 1]);
+      const query = Object.assign(new PaginationQueryDto(), { minId: 10, maxId: 50 });
+
+      await service.findAll(query);
+
+      expect(repo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: Between(10, 50) } }),
+      );
+    });
+
+    it('should filter by minId only when maxId is not given', async () => {
+      vi.mocked(repo.findAndCount).mockResolvedValue([[mockProduct], 1]);
+      const query = Object.assign(new PaginationQueryDto(), { minId: 10 });
+
+      await service.findAll(query);
+
+      expect(repo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: MoreThanOrEqual(10) } }),
+      );
+    });
+
+    it('should filter by maxId only when minId is not given', async () => {
+      vi.mocked(repo.findAndCount).mockResolvedValue([[mockProduct], 1]);
+      const query = Object.assign(new PaginationQueryDto(), { maxId: 50 });
+
+      await service.findAll(query);
+
+      expect(repo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: LessThanOrEqual(50) } }),
+      );
+    });
+
+    it('should throw BadRequestException when minId is greater than maxId', async () => {
+      const query = Object.assign(new PaginationQueryDto(), { minId: 50, maxId: 10 });
+
+      await expect(service.findAll(query)).rejects.toThrow(BadRequestException);
+      expect(repo.findAndCount).not.toHaveBeenCalled();
     });
   });
 

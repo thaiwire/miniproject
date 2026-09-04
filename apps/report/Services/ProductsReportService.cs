@@ -7,15 +7,15 @@ namespace Report.Services;
 
 public interface IProductsReportService
 {
-    Task<byte[]> GeneratePdfAsync(string bearerToken);
+    Task<byte[]> GeneratePdfAsync(string bearerToken, int? minId = null, int? maxId = null);
 }
 
 public class ProductsReportService(IProductClient productClient, IWebHostEnvironment env)
     : IProductsReportService
 {
-    public async Task<byte[]> GeneratePdfAsync(string bearerToken)
+    public async Task<byte[]> GeneratePdfAsync(string bearerToken, int? minId = null, int? maxId = null)
     {
-        var products = await productClient.GetAllProductsAsync(bearerToken);
+        var products = await productClient.GetAllProductsAsync(bearerToken, minId, maxId);
 
         using var report = new FastReport.Report();
         report.Load(Path.Combine(env.ContentRootPath, "Reports", "ProductsReport.frx"));

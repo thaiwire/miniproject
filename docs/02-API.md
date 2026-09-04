@@ -788,6 +788,18 @@ export class PaginationQueryDto implements PaginationQuery {
   @Max(100, { message: 'limit ต้องไม่เกิน 100 ต่อครั้ง' })
   limit: number = 20;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'minId ต้องมากกว่าหรือเท่ากับ 1' })
+  minId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'maxId ต้องมากกว่าหรือเท่ากับ 1' })
+  maxId?: number;
+
   get skip(): number {
     return (this.page - 1) * this.limit;
   }
@@ -798,6 +810,7 @@ export class PaginationQueryDto implements PaginationQuery {
 - **`@Max(100)`** — จำกัดไม่ให้ client ขอข้อมูลทีละมากเกินไปในครั้งเดียว (ป้องกันการใช้งานฐานข้อมูลหนักเกินจำเป็นโดยตั้งใจหรือไม่ตั้งใจก็ตาม)
 - **`page: number = 1`** — ค่า default ถ้าไม่ส่ง query string มาเลย (เช่น `GET /products` เฉย ๆ) จะได้หน้า 1 ขนาด 20 รายการ
 - **`get skip()`** — getter ที่คำนวณจำนวนแถวที่ต้อง "ข้าม" จาก page/limit เช่น page=3, limit=10 → ข้าม 20 แถวแรก (แสดงแถวที่ 21-30)
+- **`minId?` / `maxId?`** — เพิ่มเข้ามาสำหรับฟีเจอร์ "ออกรายงานสินค้าตามช่วงรหัส" (ดู [03-WEB.md](./03-WEB.md) และ [04-REPORT.md](./04-REPORT.md)) เป็น `optional` ทั้งคู่ (ไม่ใส่มา = ไม่กรอง id เลย เหมือนพฤติกรรมเดิมทุกประการ) รายละเอียดว่ากรองยังไงอยู่ที่ 13.4
 
 ### 13.3 [src/common/dto/paginated-response.dto.ts](../apps/api/src/common/dto/paginated-response.dto.ts)
 
@@ -834,6 +847,47 @@ Response ตัวอย่างของ `GET /products?page=1&limit=2`:
   "meta": { "page": 1, "limit": 2, "totalItems": 5, "totalPages": 3 }
 }
 ```
+
+### 13.4 กรองช่วง id — [src/product/product.service.ts](../apps/api/src/product/product.service.ts)
+
+ฟีเจอร์ "ออกรายงานสินค้าตามช่วงรหัส" ที่หน้าเว็บ (ดู [03-WEB.md](./03-WEB.md) Step 12) ต้องการให้ `GET /products` กรองเฉพาะสินค้าที่ `id` อยู่ในช่วงที่กำหนดได้ — ใช้ query param `minId`/`maxId` เดียวกับที่ประกาศไว้ใน `PaginationQueryDto` (13.2)
+
+```typescript
+async findAll(query: PaginationQueryDto): Promise<[ProductEntity[], number]> {
+  if (
+    query.minId !== undefined &&
+    query.maxId !== undefined &&
+    query.minId > query.maxId
+  ) {
+    throw new BadRequestException('minId ต้องไม่มากกว่า maxId');
+  }
+
+  return this.productRepo.findAndCount({
+    where: this.buildWhere(query.minId, query.maxId),
+    order: { id: 'ASC' },
+    skip: query.skip,
+    take: query.limit,
+  });
+}
+
+private buildWhere(minId?: number, maxId?: number): FindOptionsWhere<ProductEntity> {
+  if (minId !== undefined && maxId !== undefined) {
+    return { id: Between(minId, maxId) };
+  }
+  if (minId !== undefined) {
+    return { id: MoreThanOrEqual(minId) };
+  }
+  if (maxId !== undefined) {
+    return { id: LessThanOrEqual(maxId) };
+  }
+  return {}; // ไม่กรอง id เลย -> เหมือนพฤติกรรมเดิม
+}
+```
+
+- **`Between` / `MoreThanOrEqual` / `LessThanOrEqual`** — TypeORM operator สำเร็จรูปสำหรับสร้างเงื่อนไข `WHERE` แบบช่วงตัวเลข ต้องเลือกให้ตรงกับว่า client ส่ง `minId`/`maxId` มาแบบไหน: ส่งมาทั้งคู่ใช้ `Between` (ต้องการ 2 ค่าเสมอ ใช้กับแค่ค่าเดียวไม่ได้), ส่งมาแค่ `minId` ใช้ `MoreThanOrEqual`, แค่ `maxId` ใช้ `LessThanOrEqual`
+- **เช็ค `minId > maxId` ก่อนคิวรี** — ถ้าผู้ใช้กรอกช่วงกลับด้าน (เช่น minId=50, maxId=10) ให้ตอบ 400 ทันทีก่อนแตะฐานข้อมูลเลย ไม่ปล่อยให้เงียบ ๆ กลายเป็น "ไม่มีข้อมูล" ซึ่งจะทำให้ผู้ใช้สับสนว่าเป็น bug หรือแค่ไม่มีสินค้าในช่วงนั้นจริง ๆ
+
+> ⚠️ **จุดที่พลาดได้ง่ายที่สุดของฟีเจอร์นี้**: ตอน implement ครั้งแรกเคยเขียน `where: { id: this.buildIdRangeFilter(...) }` โดยให้ helper คืน `undefined` ตรง ๆ เวลาไม่มีการกรอง (`return undefined;`) ผลคือพอไม่ได้ส่ง `minId`/`maxId` มาเลย (การใช้งานปกติทั่วไป) จะได้ `where: { id: undefined }` ซึ่ง TypeORM **throw error ทันที**: `TypeORMError: Undefined value encountered in property 'ProductEntity.id' of a where condition` (กลายเป็น 500 ผ่าน `AllExceptionsFilter`) ทำให้หน้ารายการสินค้าปกติพังไปด้วยทั้งที่ไม่ได้เกี่ยวกับฟีเจอร์กรองช่วงเลย — TypeORM ต้องการให้ **ไม่มี key `id` เลย** ใน object ถ้าไม่ต้องการกรอง ไม่ใช่มี key แต่ค่าเป็น `undefined` วิธีแก้คือให้ `buildWhere` คืน `{}` (object เปล่า ไม่มี key `id`) แทนที่จะคืน `{ id: undefined }` — บทเรียนคือเวลาสร้างเงื่อนไข `where` แบบไดนามิกใน TypeORM ต้อง **ประกอบทั้ง object** แบบมีเงื่อนไข ไม่ใช่แค่ประกอบ**ค่าใน key เดียว**แล้วปล่อยให้เป็น `undefined`
 
 ## Step 14: Global Error Handling
 
@@ -935,6 +989,16 @@ curl -X POST http://localhost:3000/products \
 ```bash
 # 6. ทดสอบ pagination
 curl "http://localhost:3000/products?page=1&limit=2" \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+```bash
+# 6.1 ทดสอบกรองช่วง id (ดู Step 13.4)
+curl "http://localhost:3000/products?minId=1&maxId=5" \
+  -H "Authorization: Bearer <accessToken>"
+
+# ส่งช่วงกลับด้าน (minId มากกว่า maxId) -> ต้องได้ 400
+curl "http://localhost:3000/products?minId=50&maxId=10" \
   -H "Authorization: Bearer <accessToken>"
 ```
 

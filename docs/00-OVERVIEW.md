@@ -12,8 +12,10 @@
 | [02-API.md](./02-API.md) | Backend (NestJS) แบบ step-by-step |
 | [03-WEB.md](./03-WEB.md) | Frontend (Next.js) แบบ step-by-step |
 | [04-REPORT.md](./04-REPORT.md) | Report service (ASP.NET Core + FastReport) แบบ step-by-step |
+| [05-NEW-PROJECT-FROM-TEMPLATE.md](./05-NEW-PROJECT-FROM-TEMPLATE.md) | วิธี copy โครงนี้ไปสร้างโปรเจกต์ใหม่ (เช่น ระบบขายปลีก) เป็น repo อิสระ — เริ่มจากฐานข้อมูลเปล่า |
+| [06-EXISTING-DATABASE-ADOPTION.md](./06-EXISTING-DATABASE-ADOPTION.md) | วิธีนำโครงนี้ไปครอบฐานข้อมูล SQL Server ที่มีข้อมูลจริงอยู่แล้ว (schema เดิมไม่ตรงกับ mini-project) รวมถึงกรณีมีตารางหลักร้อยตาราง |
 
-แนะนำให้อ่านตามลำดับ 00 → 01 → 02 → 03 → 04 เพราะแต่ละไฟล์อ้างอิงความเข้าใจจากไฟล์ก่อนหน้า
+แนะนำให้อ่านตามลำดับ 00 → 01 → 02 → 03 → 04 เพราะแต่ละไฟล์อ้างอิงความเข้าใจจากไฟล์ก่อนหน้า — ส่วน 05/06 อ่านแยกเฉพาะตอนจะเริ่มโปรเจกต์ใหม่จากโครงนี้เท่านั้น (05 = ฐานข้อมูลเปล่า, 06 = มีฐานข้อมูล/ข้อมูลอยู่ก่อนแล้ว)
 
 ---
 
@@ -89,6 +91,52 @@ mini-project/                  ← root ของ monorepo (มี package.json 
 | `lib/` | โค้ดพื้นฐานที่ทุก module ต้องใช้ร่วมกันจริง ๆ เท่านั้น | `api.ts` (fetch client กลาง), `auth-storage.ts` (JWT), `utils.ts` (`cn()`) |
 
 **module หนึ่งยัง import จาก module อื่นได้** ถ้า feature นั้นต้องใช้จริง ๆ (เช่น `modules/products/components/ProductList.tsx` เรียก `modules/reports/report-api.ts` เพื่อโชว์ปุ่ม "ออกรายงาน PDF") — กติกาไม่ได้ห้ามข้าม module เด็ดขาด แค่กันไม่ให้ของเฉพาะ feature ไปกองรวมอยู่ใน `lib/`/`components/` แบบไม่มีเจ้าของชัดเจน
+
+### 2.2 ถ้า module เดียวโตจนมีเมนู 20+ เมนู ต้องออกแบบยังไง (แนวทางสำหรับ "ระบบย่อย" ในอนาคต)
+
+โครงสร้าง `modules/<ชื่อ>/` ในหัวข้อ 2.1 เหมาะกับ module ขนาดเล็ก-กลาง (เช่น `products`, `auth`, `profile`, `reports` ที่มีอยู่ตอนนี้ — แต่ละ module มีไม่กี่หน้าจอ) แต่ถ้าจะขยายระบบให้เป็น ERP เต็มรูปแบบ ที่แต่ละ **module folder แทนทั้ง "ระบบย่อย"** (เช่น `accounting/`, `inventory/`, `purchasing/`) ซึ่งแต่ละระบบย่อยมีเมนูย่อยของตัวเองไม่น้อยกว่า 20 เมนู โครงสร้างแบบแบนราบเดิม (`modules/accounting/components/*.tsx` รวมกันหมด, `accounting-api.ts` ไฟล์เดียว) จะเริ่มหาไฟล์ยากและ merge conflict บ่อยขึ้นเรื่อย ๆ เมื่อหลายคนแก้ module เดียวกันพร้อมกัน — ต้องเพิ่ม**ชั้นการจัดกลุ่มที่สอง**ภายใน module นั้น โดยใช้กติกาเดียวกับ 2.1 ซ้ำอีกระดับ (จัดตาม sub-feature ไม่ใช่ตามประเภทไฟล์):
+
+```
+modules/accounting/                    ← "ระบบย่อย" บัญชี (1 module folder = 1 ระบบย่อยใน ERP)
+├── invoices/                           ← sub-feature: ใบแจ้งหนี้ (เมนูของตัวเอง)
+│   ├── invoice-api.ts
+│   └── components/
+│       ├── InvoiceList.tsx
+│       ├── InvoiceForm.tsx
+│       └── InvoiceDetail.tsx
+├── payments/                           ← sub-feature: การรับ/จ่ายเงิน
+│   ├── payment-api.ts
+│   └── components/{PaymentList,PaymentForm}.tsx
+├── journal-entries/                    ← sub-feature: สมุดรายวัน
+│   └── ...
+├── ledger/                             ← sub-feature: บัญชีแยกประเภท
+│   └── ...
+│                                        (รวมแล้ว 20+ เมนูกระจายอยู่ใน sub-feature เหล่านี้)
+├── shared/                             ← ใช้ร่วมกัน "เฉพาะภายใน accounting module" เท่านั้น
+│   ├── types.ts                         (เช่น AccountType enum ที่ invoices/payments/ledger ใช้ร่วมกัน)
+│   └── components/AccountPicker.tsx     (dropdown เลือกบัญชี ใช้ซ้ำหลาย sub-feature)
+└── routes.ts                           ← ประกาศเมนู/nav item ทั้งหมดของ module นี้ไว้ที่เดียว
+```
+
+หลักการสำคัญ 3 ข้อ (เป็นกติกาเดียวกับ 2.1 แต่ประยุกต์ใช้อีกชั้น):
+
+1. **แบ่งย่อยตาม sub-feature ไม่ใช่ตามประเภทไฟล์** — `invoices/`, `payments/`, `ledger/` แต่ละอันมี `*-api.ts` และ `components/` ของตัวเอง เหมือนที่ `modules/products/` มีของตัวเองแยกจาก `modules/auth/` — เป็นกฎเดิมที่ทำซ้ำอีกระดับ ไม่ใช่แนวคิดใหม่
+2. **`shared/` ของ module ≠ `lib/` ของทั้งแอป** — `modules/accounting/shared/` เก็บของที่ใช้ร่วมกัน**เฉพาะภายใน accounting** เท่านั้น (เช่น `AccountPicker` ที่ invoices กับ ledger ต่างก็ต้องใช้) ถ้า module อื่น (เช่น `inventory`) ก็ต้องใช้ `AccountPicker` เหมือนกัน **ค่อย** ยกขึ้นไปที่ `lib/`หรือ `components/` ระดับแอปทีหลัง — อย่ายกขึ้นไปข้างบนล่วงหน้าก่อนมีเหตุผลจริง (YAGNI) เพราะจะทำให้ `lib/` บวมด้วยของที่จริง ๆ ใช้แค่ module เดียว
+3. **`routes.ts` ต่อ module แทนการยัดทุกเมนูลง `Sidebar.tsx` ตรง ๆ** — pattern ปัจจุบันที่ [Sidebar.tsx](../apps/web/src/components/layout/Sidebar.tsx) เก็บ `NAV_ITEMS` เป็น array เดียวแบน ๆ (ดู [03-WEB.md Step 10.1](./03-WEB.md#101-sidebar--srccomponentslayoutsidebartsx)) ใช้ได้ตอนมีไม่กี่เมนู แต่พอแต่ละระบบย่อยมี 20+ เมนู การ hardcode ทุกเมนูของทุกระบบย่อยลง array เดียวจะทำให้ไฟล์นั้นกลายเป็นจุดที่ทุกทีมต้องมาแก้ร่วมกัน (merge conflict บ่อย) แนวทางที่ scale ได้คือให้แต่ละ module export `routes.ts`/`nav.ts` ของตัวเอง แล้วให้ `Sidebar.tsx` แค่ import มา flatten รวมกัน — ยังเปิดทางให้กรองเมนูตาม role/สิทธิ์ผู้ใช้ต่อ module ได้ในอนาคตโดยไม่ต้องแตะ `Sidebar.tsx` เลย
+
+**ฝั่ง backend (`apps/api`) ก็ต้องขยายตามหลักการเดียวกัน** — NestJS รองรับ **nested module** อยู่แล้วโดย native ไม่ต้องแนะนำ pattern ใหม่: `AccountingModule` จะ `imports: [InvoicesModule, PaymentsModule, LedgerModule]` แทนที่จะเป็น module เดียวที่มี controller/service 20 กว่าตัวแบนราบเหมือนที่ `ProductModule`/`UserModule`/`AuthModule` เป็นอยู่ตอนนี้ (ดู [02-API.md Step 2.3](./02-API.md#23-feature-modules-และ-global-guard)) — แต่ละ sub-module ย่อย (`InvoicesModule` ฯลฯ) มี controller/service/entity ของตัวเอง เหมือนที่ `ProductModule` มีของตัวเองแยกจาก `UserModule`
+
+> **เมื่อไหร่ควรเริ่มทำแบบนี้**: อย่าเริ่ม nested structure ล่วงหน้าก่อนมี module ที่โตจริง ๆ — ตอนนี้ทั้ง `modules/products`, `modules/auth`, `modules/profile`, `modules/reports` ยังเล็กพอที่โครงสร้างแบนราบใน 2.1 เพียงพออยู่ ให้ใช้แนวทางในหัวข้อนี้ **เมื่อมี module ไหนเริ่มมีมากกว่า 1 sub-feature ที่แต่ละอันมีหน้าจอ/route ของตัวเองชัดเจน** ไม่ใช่ทำไปพร้อมกันทุก module ตั้งแต่แรก (premature abstraction จะทำให้โปรเจกต์เล็กดูซับซ้อนเกินจำเป็น)
+
+### 2.3 หลาย dev ทำงานพร้อมกันในระบบ ERP เดียวกัน — โครงสร้างนี้ช่วยยังไง
+
+โครงสร้าง module-based (2.1) และ nested sub-feature (2.2) ไม่ได้มีไว้แค่จัดไฟล์ให้สวย แต่เป็นกลไกหลักที่ทำให้**หลายคน/หลายทีมแก้โค้ดพร้อมกันได้โดยชนกันน้อยที่สุด** — ไม่มีเครื่องมือพิเศษเพิ่มเติม อาศัยแค่ขอบเขตของโฟลเดอร์ที่ชัดเจนอยู่แล้ว:
+
+1. **แบ่งความเป็นเจ้าของตามขอบเขต module/sub-feature** — 1 คนหรือ 1 ทีมย่อยรับผิดชอบ 1 ระบบย่อย (เช่น `modules/accounting/`) หรือถ้าทีมใหญ่พอ รับผิดชอบระดับ sub-feature เดียว (เช่น แค่ `modules/accounting/invoices/`) เพราะ `invoices/` กับ `modules/inventory/` ไม่มีไฟล์ทับกันเลยตามการออกแบบใน 2.1/2.2 สองคนที่ทำงานคนละระบบย่อยจึงแทบไม่มีทาง merge conflict กันเลย ต่างจากโครงสร้างแบนราบเดิมที่ทุกคนต้องมาแก้ `components/`/`lib/` ก้อนเดียวกันตลอด
+2. **ตั้งชื่อ branch ตามขอบเขต module ไม่ใช่ตามคนหรือ sprint** — เช่น `feat/accounting-invoices` ไม่ใช่ `feat/john-week3` — ทำให้เห็นจาก branch name ได้ทันทีว่ากระทบไฟล์ส่วนไหน ช่วยตอน code review และตอนต้องย้อน commit กลับ (revert) แบบเจาะจงเฉพาะ feature นั้น
+3. **`packages/shared-types` ต้องระวังเป็นพิเศษ** — เป็นจุดเดียวที่ทุก module (และ `apps/api`) พึ่งพาร่วมกัน (ดูหัวข้อ 3) การแก้ type ที่นี่กระทบเป็นวงกว้างข้าม module ทันที ควรปฏิบัติเหมือนแก้ public API: PR ที่แตะไฟล์นี้ควรแจ้ง reviewer จากทุก module ที่ใช้ type ที่เปลี่ยน และต้องรัน `npm run build:shared` (ดู [01-MAIN-PROJECT.md](./01-MAIN-PROJECT.md)) ให้ผ่านก่อน merge เสมอ เพราะ `dist/` ที่ไม่ทันสมัยจะทำให้ module อื่นเห็น type ผิดเงียบ ๆ
+4. **backend ได้ขอบเขตเดียวกันฟรีจาก NestJS nested module** — ตามที่อธิบายใน 2.2 คนที่ทำ `InvoicesModule` กับคนที่ทำ `PaymentsModule` แทบไม่ต้องแตะไฟล์เดียวกันเลยนอกจากบรรทัด `imports: [...]` ใน `AccountingModule` (เพิ่ม module ใหม่เข้า array) ซึ่งเป็นจุดชนกันที่เล็กและแก้ conflict ง่ายมาก เทียบกับถ้าทุกคนต้องแก้ controller/serviceไฟล์เดียวกันตลอด
+5. **CI ที่ scale ตาม module ได้ (ทำเมื่อจำเป็นจริง)** — เมื่อจำนวน module มากขึ้นจนรัน lint/test ทั้ง monorepo ทุก PR ช้าเกินไป ค่อยปรับ CI ให้รันเฉพาะ workspace/module ที่ไฟล์ในนั้นถูกแก้ (npm workspaces รองรับ `-w <package>` อยู่แล้วตามที่ใช้ใน root `package.json` — ดู [01-MAIN-PROJECT.md](./01-MAIN-PROJECT.md)) ไม่ต้องรีบทำตั้งแต่โปรเจกต์ยังเล็ก
 
 ## 3. ทำไมต้องแยกเป็น 3 โปรเจกต์ย่อย (monorepo)?
 

@@ -56,6 +56,9 @@ export default function ProductList() {
           <Button variant="outline" onClick={handlePreviewReport} disabled={isPreviewing}>
             {isPreviewing ? "กำลังออกรายงาน..." : "ออกรายงาน PDF"}
           </Button>
+          <Link href="/products/report" className={buttonVariants({ variant: "outline" })}>
+            รายงานสินค้าตามช่วงรหัส
+          </Link>
           <Link href="/products/new" className={buttonVariants({ variant: "default" })}>
             + เพิ่มสินค้า
           </Link>
@@ -72,6 +75,7 @@ export default function ProductList() {
         <table className="mt-4 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
+              <th className="py-2">รหัส</th>
               <th className="py-2">ชื่อสินค้า</th>
               <th className="py-2">ราคา</th>
               <th className="py-2">สต๊อก</th>
@@ -81,6 +85,7 @@ export default function ProductList() {
           <tbody>
             {products.map((product) => (
               <tr key={product.id} className="border-b last:border-0">
+                <td className="py-2 text-muted-foreground">{product.id}</td>
                 <td className="py-2">{product.name}</td>
                 <td className="py-2">{product.price.toLocaleString()} บาท</td>
                 <td className="py-2">{product.stock}</td>

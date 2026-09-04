@@ -126,10 +126,15 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/reports/products", async (HttpContext ctx, IProductsReportService reportService) =>
+app.MapGet("/reports/products", async (HttpContext ctx, IProductsReportService reportService, int? minId, int? maxId) =>
 {
+    if (minId.HasValue && maxId.HasValue && minId > maxId)
+    {
+        return Results.BadRequest(new { message = "minId ต้องไม่มากกว่า maxId" });
+    }
+
     var token = ctx.Request.Headers.Authorization.ToString().Replace("Bearer ", "");
-    var pdfBytes = await reportService.GeneratePdfAsync(token);
+    var pdfBytes = await reportService.GeneratePdfAsync(token, minId, maxId);
     return Results.File(pdfBytes, "application/pdf", "products-report.pdf");
 })
 .RequireAuthorization();
@@ -138,6 +143,8 @@ app.MapGet("/reports/products", async (HttpContext ctx, IProductsReportService r
 - **CORS** — เปิดเฉพาะ origin `http://localhost:3001` (`apps/web`) เหมือนกับที่ `apps/api` ทำใน `main.ts` (ดู [02-API.md Step 1](./02-API.md#step-1-จุดเริ่มต้นโปรแกรม--srcmaints)) เพราะ `apps/web` เรียก `apps/report` ตรงจาก browser เช่นกัน (คนละ origin/port: `3001` → `5100`)
 - **ลำดับ `UseCors()` → `UseAuthentication()` → `UseAuthorization()`** — ต้องเรียงแบบนี้เสมอใน ASP.NET Core middleware pipeline เพราะแต่ละ middleware ทำงานตามลำดับที่ประกาศ (CORS ต้องเช็คก่อน auth เพื่อให้ preflight request ผ่านได้ก่อนจะไปเจอ auth guard)
 - **`app.MapGet(...).RequireAuthorization()`** — Minimal API ผูก authorization เข้ากับแต่ละ route ตรง ๆ (ต่างจาก NestJS ที่ใช้ global guard แบบ `APP_GUARD` ใน [02-API.md](./02-API.md)) เพราะ service นี้มีแค่ endpoint เดียว จึงไม่จำเป็นต้องมีกลไก global guard ที่ซับซ้อนกว่านี้
+- **`int? minId, int? maxId` เป็น parameter ของ route handler ตรง ๆ** — Minimal API ของ ASP.NET Core bind query string parameter เข้ากับ parameter ของ lambda โดยอัตโนมัติตามชื่อ (`?minId=1&maxId=5` → `minId`/`maxId`) ไม่ต้องมี attribute หรือ DTO แยกเหมือน NestJS's `@Query() query: PaginationQueryDto` (ดู [02-API.md](./02-API.md)) เพราะ endpoint นี้มีแค่ 2 parameter ที่เป็น optional ธรรมดา — ใช้ `int?` (nullable int) แทน `int` เพื่อให้รู้ได้ว่า "ไม่ได้ส่งมา" (`null`) ต่างจาก "ส่งมาเป็น 0"
+- **เช็ค `minId > maxId` ก่อนเรียก `GeneratePdfAsync`** — เหมือนกับที่ `apps/api`'s `ProductService.findAll()` เช็คซ้ำอีกชั้น (ดู [02-API.md Step 13.4](./02-API.md#134-กรองช่วง-id--srcproductproductservicets)) เป็น validation คนละชั้นกัน คนละภาษากัน แต่กฎเดียวกัน — เผื่อมีใครเรียก `apps/report` ตรง ๆ ข้ามฝั่งเว็บมา (เช่นทดสอบด้วย curl/Postman) ก็ยังโดนเช็คอยู่ดี ไม่ต้องพึ่งพา validation ฝั่ง frontend อย่างเดียว
 - **`ctx.Request.Headers.Authorization.ToString().Replace("Bearer ", "")`** — ดึง token ดิบจาก header `Authorization: Bearer <token>` ที่ browser แนบมา (ผ่านการตรวจสอบจาก `RequireAuthorization()` แล้วว่า valid) เพื่อส่งต่อไปให้ `ProductClient` เรียก `apps/api` ต่อ (ดู Step 3) — เป็นการ "ส่งต่อ identity เดิม" ไม่ใช้ credential แยกต่างหาก
 - **`Results.File(pdfBytes, "application/pdf", "products-report.pdf")`** — ตอบกลับเป็นไฟล์ไบนารี พร้อม `Content-Type: application/pdf` แต่ ASP.NET Core จะแนบ header `Content-Disposition: attachment` มาด้วยโดย default (บอก browser ว่าควร "ดาวน์โหลด" ไฟล์นี้) — header นี้มีผลเฉพาะตอน browser navigate ไปที่ URL นี้ตรง ๆ เท่านั้น เมื่อฝั่งเว็บ fetch มาเป็น `Blob` แล้วสร้าง URL ใหม่เอง (ดู Step 5) header นี้จะไม่ติดไปด้วย ทำให้ยังแสดงผลแบบ inline ในแท็บใหม่ได้ตามที่ต้องการ
 
@@ -148,11 +155,13 @@ public class ProductClient(HttpClient httpClient) : IProductClient
 {
     private const int MaxLimit = 100;
 
-    public async Task<List<ProductDto>> GetAllProductsAsync(string bearerToken)
+    public async Task<List<ProductDto>> GetAllProductsAsync(string bearerToken, int? minId = null, int? maxId = null)
     {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/products?page=1&limit={MaxLimit}");
+        var queryParams = $"page=1&limit={MaxLimit}";
+        if (minId.HasValue) queryParams += $"&minId={minId.Value}";
+        if (maxId.HasValue) queryParams += $"&maxId={maxId.Value}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/products?{queryParams}");
         request.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
 
@@ -164,6 +173,10 @@ public class ProductClient(HttpClient httpClient) : IProductClient
     }
 }
 ```
+
+### 3.0 พารามิเตอร์ `minId`/`maxId` — ส่งต่อเงื่อนไขช่วงรหัสไปให้ `apps/api` กรองให้
+
+`GetAllProductsAsync` รับ `minId`/`maxId` เป็น **optional parameter** (`int? minId = null, int? maxId = null`) เพื่อรองรับฟีเจอร์ "ออกรายงานสินค้าตามช่วงรหัส" (ดู [03-WEB.md Step 13](./03-WEB.md#step-13-ออกรายงานสินค้าตามช่วงรหัส--srcappauthenticatedproductsreportpagetsx--srcmodulesreportscomponentsproductrangereportformtsx)) — สังเกตว่า `apps/report` **ไม่ได้กรองข้อมูลเอง** แค่ต่อ query string เพิ่มแล้วส่งต่อให้ `GET /products` ของ `apps/api` เป็นคนกรองจริง (ดู [02-API.md Step 13.4](./02-API.md#134-กรองช่วง-id--srcproductproductservicets)) — เหตุผลเดียวกับ 3.1: ให้ `apps/api` เป็นแหล่งความจริงเดียว (single source of truth) ของ business logic ทั้งหมดเกี่ยวกับข้อมูลสินค้า `apps/report` มีหน้าที่แค่เรียกใช้และ render ผลลัพธ์เป็น PDF เท่านั้น ไม่ตัดสินใจอะไรเกี่ยวกับข้อมูลเอง
 
 ### 3.1 ทำไมไม่ต่อฐานข้อมูล SQL Server ตรง ๆ
 
@@ -180,9 +193,9 @@ public class ProductClient(HttpClient httpClient) : IProductClient
 ## Step 4: สร้าง PDF ด้วย FastReport — [Services/ProductsReportService.cs](../apps/report/Services/ProductsReportService.cs)
 
 ```csharp
-public async Task<byte[]> GeneratePdfAsync(string bearerToken)
+public async Task<byte[]> GeneratePdfAsync(string bearerToken, int? minId = null, int? maxId = null)
 {
-    var products = await productClient.GetAllProductsAsync(bearerToken);
+    var products = await productClient.GetAllProductsAsync(bearerToken, minId, maxId);
 
     using var report = new FastReport.Report();
     report.Load(Path.Combine(env.ContentRootPath, "Reports", "ProductsReport.frx"));
@@ -346,6 +359,8 @@ export async function previewProductsReport(): Promise<void> {
 3. กด "ออกรายงาน PDF" มุมขวาบนของตาราง — ควรเห็นแท็บใหม่เปิดขึ้นทันที (ไม่ใช่ popup ถูกบล็อก) แล้วแสดง PDF รายชื่อสินค้าทั้งหมด (ไม่มีคอลัมน์ต้นทุน/`costPrice`)
 4. ลอง logout แล้วยิง `curl http://localhost:5100/reports/products` ตรง ๆ โดยไม่แนบ token — ควรได้ 401
 5. ลองปิด `apps/api` (`Ctrl+C` ที่ terminal ของ `dev:api`) แล้วกด "ออกรายงาน PDF" อีกครั้ง — ควรเห็น error message เพราะ `ProductClient.GetAllProductsAsync` เรียก `apps/api` ไม่ได้ (`response.EnsureSuccessStatusCode()` จะ throw)
+6. ยิง `curl "http://localhost:5100/reports/products?minId=1&maxId=1" -H "Authorization: Bearer <token>"` (ดู [03-WEB.md Step 13](./03-WEB.md#step-13-ออกรายงานสินค้าตามช่วงรหัส--srcappauthenticatedproductsreportpagetsx--srcmodulesreportscomponentsproductrangereportformtsx) สำหรับทดสอบผ่านหน้าเว็บโดยตรง) — ควรได้ PDF ที่มีแค่สินค้า id 1
+7. ยิง `curl "http://localhost:5100/reports/products?minId=50&maxId=10" -H "Authorization: Bearer <token>"` (ช่วงกลับด้าน) — ควรได้ 400 พร้อม `{"message":"minId ต้องไม่มากกว่า maxId"}`
 
 ---
 

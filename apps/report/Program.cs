@@ -62,12 +62,17 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/reports/products", async (HttpContext ctx, IProductsReportService reportService) =>
+app.MapGet("/reports/products", async (HttpContext ctx, IProductsReportService reportService, int? minId, int? maxId) =>
 {
+    if (minId.HasValue && maxId.HasValue && minId > maxId)
+    {
+        return Results.BadRequest(new { message = "minId ต้องไม่มากกว่า maxId" });
+    }
+
     // ดึง token เดิมจาก request มาส่งต่อให้ apps/api ตอนเรียก GET /products
     // (ใช้ identity เดียวกับผู้ใช้จริง ไม่ต้องมี service-account credential แยก)
     var token = ctx.Request.Headers.Authorization.ToString().Replace("Bearer ", "");
-    var pdfBytes = await reportService.GeneratePdfAsync(token);
+    var pdfBytes = await reportService.GeneratePdfAsync(token, minId, maxId);
     return Results.File(pdfBytes, "application/pdf", "products-report.pdf");
 })
 .RequireAuthorization();

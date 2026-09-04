@@ -16,6 +16,19 @@ export class PaginationQueryDto implements PaginationQuery {
   @Max(100, { message: 'limit ต้องไม่เกิน 100 ต่อครั้ง' }) // กัน client ขอข้อมูลทีละมาก ๆ จนฐานข้อมูลหนัก
   limit: number = 20;
 
+  // ช่วง id สำหรับกรองสินค้า (เช่น ออกรายงานเฉพาะ id 10-50) ปล่อยว่างไว้ = ไม่กรอง
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'minId ต้องมากกว่าหรือเท่ากับ 1' })
+  minId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'maxId ต้องมากกว่าหรือเท่ากับ 1' })
+  maxId?: number;
+
   get skip(): number {
     return (this.page - 1) * this.limit;
   }

@@ -659,7 +659,96 @@ async function onSubmit(data: ProductFormOutput) {
 > Frontend validate เพื่อ **UX** — บอก user ทันทีโดยไม่ต้องรอ network round-trip
 > Backend validate เพื่อ **ความปลอดภัย** — เพราะ frontend validation สามารถถูกข้ามได้ง่าย ๆ (ปิด JS, ยิง request ตรงด้วย curl/Postman) backend จึงต้องเช็คซ้ำเสมอ ห้ามเชื่อ frontend อย่างเดียว
 
-## Step 13: ทดสอบฝั่งเว็บด้วยตัวเอง
+## Step 13: ออกรายงานสินค้าตามช่วงรหัส — [src/app/(authenticated)/products/report/page.tsx](../apps/web/src/app/(authenticated)/products/report/page.tsx) + [src/modules/reports/components/ProductRangeReportForm.tsx](../apps/web/src/modules/reports/components/ProductRangeReportForm.tsx)
+
+ต่อยอดจากปุ่ม "ออกรายงาน PDF" เดิม (ที่ออกรายงานสินค้า**ทั้งหมด**) เพิ่มอีกทางเลือกคือให้ผู้ใช้ระบุ**ช่วงรหัสสินค้า (id)** ก่อนออกรายงาน เพื่อดูเฉพาะบางกลุ่มสินค้า
+
+### 13.1 ทำไมแยกเป็นหน้าใหม่ (`/products/report`) แทนที่จะเป็น panel แทรกในหน้า `/products`
+
+รอบแรกที่ implement ฟีเจอร์นี้เคยลองทำเป็น panel ที่กด toggle เปิด/ปิดแทรกอยู่บนหน้า `/products` เลย (ใช้ `useState` คุม `isRangeFormOpen` ใน `ProductList.tsx`) แต่เปลี่ยนมาเป็นหน้าแยกต่างหากตามที่ขอ เพราะ:
+
+- **สอดคล้องกับ pattern เดิมของแอป** — `/products/new` (Step 12) ก็แยกเป็นหน้าของตัวเอง ไม่ใช่ panel แทรกในหน้า list เหมือนกัน การมีฟอร์มอื่นทำตัวไม่เหมือนกันจะทำให้ผู้ใช้คาดเดา UI ไม่ได้
+- **URL แชร์ได้/bookmark ได้** — หน้าที่มี URL ของตัวเอง (`/products/report`) กด back/forward ของเบราว์เซอร์แล้วพฤติกรรมเป็นไปตามที่คาดหวัง ต่างจาก state ที่เก็บใน component เดียว ซึ่งหายไปทันทีที่ refresh หรือกด back
+- **`ProductList.tsx` ไม่ต้องรู้จัก `ProductRangeReportForm` โดยตรง** — ลด coupling ระหว่างสอง component ลง เหลือแค่ `<Link href="/products/report">` เชื่อมกันแบบเดียวกับที่เชื่อมไปหน้า `/products/new` อยู่แล้ว
+
+### 13.2 หน้า route — โครงเดียวกับ `products/new/page.tsx` เป๊ะ ๆ
+
+```tsx
+// app/(authenticated)/products/report/page.tsx
+import ProductRangeReportForm from "@/modules/reports/components/ProductRangeReportForm";
+
+export default function ProductRangeReportPage() {
+  return (
+    <div className="mx-auto max-w-xl rounded-2xl bg-card p-6 shadow-sm ring-1 ring-border">
+      <h1 className="mb-1 text-xl font-bold">ออกรายงานสินค้าตามช่วงรหัส</h1>
+      <p className="mb-4 text-sm text-muted-foreground">
+        ระบุช่วงรหัสสินค้า (id) ที่ต้องการ แล้วออกรายงานเฉพาะสินค้าที่อยู่ในช่วงนั้น
+      </p>
+      <ProductRangeReportForm />
+    </div>
+  );
+}
+```
+
+`page.tsx` ยังคงทำหน้าที่แค่ "ประกาศ route" ตาม pattern ที่อธิบายไว้ใน Step 6.2 — logic จริงทั้งหมดอยู่ใน `ProductRangeReportForm` (Client Component)
+
+### 13.3 ฟอร์ม — ใช้ react-hook-form + zod แบบเดียวกับ `ProductForm` แต่มี `.refine()` เพิ่ม
+
+```typescript
+const rangeReportSchema = z
+  .object({
+    minId: z.coerce.number().int().min(1, "รหัสต้องมากกว่าหรือเท่ากับ 1").optional().or(z.literal("")),
+    maxId: z.coerce.number().int().min(1, "รหัสต้องมากกว่าหรือเท่ากับ 1").optional().or(z.literal("")),
+  })
+  .refine(
+    (data) => {
+      if (data.minId === "" || data.maxId === "" || data.minId === undefined || data.maxId === undefined) {
+        return true;
+      }
+      return data.minId <= data.maxId;
+    },
+    { message: "รหัสเริ่มต้นต้องไม่มากกว่ารหัสสิ้นสุด", path: ["maxId"] },
+  );
+```
+
+- **`.optional().or(z.literal(""))`** — ทั้ง `minId` และ `maxId` เป็น field ที่**เว้นว่างได้** (ไม่กรอง = ออกรายงานทั้งหมด เหมือนปุ่ม "ออกรายงาน PDF" เดิม) `<input type="number">` ที่เว้นว่างจะส่งค่าเป็น empty string `""` ไม่ใช่ `undefined` จึงต้องรับทั้งสองแบบไว้ในสคีมา (`z.coerce.number()` แปลง `""` เป็น `NaN` ไม่ใช่ `undefined` ถ้าไม่มี `.or(z.literal(""))` กำกับไว้)
+- **`.refine(...)`** — วิธีของ zod สำหรับ validation ที่ต้อง**เทียบสอง field เข้าด้วยกัน** (cross-field validation) ต่างจาก `.min()`/`.max()` ที่เช็คแค่ field เดียวโดด ๆ เช็คว่าถ้ากรอกมาทั้งคู่ `minId` ต้องไม่มากกว่า `maxId` — ถ้าฝ่าฝืนจะโชว์ error message ที่ field `maxId` (กำหนดผ่าน `path: ["maxId"]`)
+- **เช็คซ้ำอีก 2 ชั้นที่ backend** — `apps/report`'s `/reports/products` endpoint และ `apps/api`'s `GET /products` (ดู [02-API.md Step 13.4](./02-API.md#134-กรองช่วง-id--srcproductproductservicets)) ต่างก็เช็ค `minId > maxId` ซ้ำอีกรอบ เพราะ frontend validation ข้ามได้เสมอ (ปิด JS, เรียก API ตรง) — หลักการเดียวกับที่ Step 12.3 อธิบายไว้เรื่อง "validate ทั้งสองฝั่ง"
+
+### 13.4 เรียกรายงานพร้อมเงื่อนไข — [src/modules/reports/report-api.ts](../apps/web/src/modules/reports/report-api.ts)
+
+```typescript
+export interface ProductReportFilter {
+  minId?: number;
+  maxId?: number;
+}
+
+export async function previewProductsReport(filter?: ProductReportFilter): Promise<void> {
+  const newTab = window.open("", "_blank");
+
+  const params = new URLSearchParams();
+  if (filter?.minId !== undefined) params.set("minId", String(filter.minId));
+  if (filter?.maxId !== undefined) params.set("maxId", String(filter.maxId));
+  const query = params.toString();
+
+  const token = getAccessToken();
+  const res = await fetch(`${REPORT_API_URL}/reports/products${query ? `?${query}` : ""}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  // ... ส่วนที่เหลือเหมือน Step 7 ของ 04-REPORT.md ทุกประการ (เปิด blob URL ในแท็บที่เปิดไว้)
+}
+```
+
+`previewProductsReport()` ตัวเดิม (ดู [04-REPORT.md](./04-REPORT.md) Step 7) รับ parameter `filter` เพิ่มเข้ามาเป็น **optional** — ปุ่ม "ออกรายงาน PDF" เดิมที่หน้า `/products` เรียกฟังก์ชันนี้โดยไม่ส่ง `filter` เลย (ออกรายงานทั้งหมดเหมือนเดิม) ส่วนฟอร์มใน `ProductRangeReportForm` ส่ง `{ minId, maxId }` เข้ามา — ใช้ฟังก์ชันร่วมกันตัวเดียว ไม่ต้องแยกเป็นสองฟังก์ชันที่โค้ดซ้ำกันเกือบหมด (pattern เดียวกับ `apps/report`'s `GeneratePdfAsync` ที่รับ `minId`/`maxId` เป็น optional parameter เช่นกัน)
+
+**สังเกตว่าไม่ router.push ออกจากหน้านี้หลัง submit สำเร็จ** — ต่างจาก `ProductForm` (Step 12.2) ที่ `router.push("/products")` กลับไปหน้า list หลังสร้างสินค้าสำเร็จ เพราะรายงานที่ได้เปิดเป็น**แท็บใหม่ต่างหาก** ผู้ใช้อาจอยากออกรายงานซ้ำด้วยเงื่อนไขช่วง id อื่นต่อในหน้าเดิมได้เลย จึงแค่โชว์ข้อความ "ออกรายงานสำเร็จ ดูผลลัพธ์ได้ที่แท็บใหม่ที่เปิดขึ้น" แล้วปล่อยให้ฟอร์มอยู่ที่เดิม
+
+### 13.5 ทางเข้าอื่น ๆ ที่เพิ่มเข้ามา
+
+- **[Sidebar.tsx](../apps/web/src/components/layout/Sidebar.tsx)** — เพิ่มรายการ `{ href: "/products/report", label: "รายงานตามช่วงรหัส" }` เข้า `NAV_ITEMS` (ดู Step 10.1)
+- **[ProductList.tsx](../apps/web/src/modules/products/components/ProductList.tsx)** — เพิ่มปุ่ม `<Link href="/products/report">` ข้างปุ่ม "ออกรายงาน PDF" เดิม และเพิ่มคอลัมน์ "รหัส" (แสดง `product.id`) เข้าไปในตารางสินค้า เพื่อให้ผู้ใช้เห็นว่าสินค้าแต่ละชิ้นมี id เท่าไหร่ก่อนจะไปกรอกช่วงในฟอร์ม
+
+## Step 14: ทดสอบฝั่งเว็บด้วยตัวเอง
 
 1. เปิด `http://localhost:3001` ทั้งที่ยังไม่ login — ควรถูก redirect ไป `/login` (ผ่าน `/` → `/products` → `AuthenticatedLayout` เจอไม่มี token → เด้งไป `/login`)
 2. กด "ยังไม่มีบัญชี? สมัครสมาชิก" ไปหน้า `/register` กรอกข้อมูลแล้วสมัคร — ควรเห็นข้อความสำเร็จค้าง 1.5 วินาทีแล้วเด้งไป `/login` อัตโนมัติ (Step 9)
@@ -671,6 +760,7 @@ async function onSubmit(data: ProductFormOutput) {
 8. คลิกเมนูมุมขวาบน → "ออกจากระบบ" — ควรเด้งกลับ `/login` แล้วถ้าลองกด back หรือพิมพ์ URL `/products` เองควรถูกเด้งกลับ `/login` อีกครั้ง (ทดสอบว่า token ถูกลบจริง)
 9. ลองปิด backend (`Ctrl+C` ที่ terminal ของ `dev:api`) แล้ว login/สร้างสินค้าอีกครั้ง — ควรเห็น error message แสดงใต้ปุ่ม (ทดสอบ error handling ผ่าน `ApiError`)
 10. ที่หน้า `/products` กด "ออกรายงาน PDF" (มุมขวาบนของตาราง) — ต้องรัน `npm run dev:report` ไว้ก่อน (ดู [01-MAIN-PROJECT.md](./01-MAIN-PROJECT.md) Step 3.6) ควรเห็น tab ใหม่เปิดขึ้นมาแสดงไฟล์ PDF รายชื่อสินค้า (ไม่ใช่ดาวน์โหลดไฟล์อัตโนมัติ) รายละเอียดเต็ม ๆ อยู่ใน [04-REPORT.md](./04-REPORT.md)
+11. กด "รายงานตามช่วงรหัส" ที่ sidebar (หรือปุ่มบนหน้า `/products`) — ควรเห็นฟอร์มช่วงรหัส กรอก "รหัสเริ่มต้น" มากกว่า "รหัสสิ้นสุด" (เช่น 50 กับ 10) แล้วกดออกรายงาน — ควรเห็น validation error ทันทีโดยยังไม่ยิง request (Step 13.3) แก้ให้ถูกแล้วลองใหม่ควรเห็นแท็บใหม่เปิดพร้อม PDF ที่มีแค่สินค้าที่ id อยู่ในช่วงนั้นจริง ๆ (เทียบกับคอลัมน์ "รหัส" ในตาราง Step 13.5)
 
 ---
 

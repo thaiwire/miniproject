@@ -1,6 +1,8 @@
 export interface PaginationQuery {
   page?: number;
   limit?: number;
+  minId?: number;
+  maxId?: number;
 }
 
 export interface PaginationMeta {
